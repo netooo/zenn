@@ -3,12 +3,9 @@ title: "MySQL event_scheduler のエラーを通知する"
 emoji: "🧤"
 type: "tech"
 topics: ["MySQL", "AWS", "CloudWatch", "Terraform", "Tech"]
+publication_name: fukurou_labo
 published: false
 ---
-
-# MySQLのイベントスケジューラのエラーを拾って通知してみた
-
-## はじめに
 
 突然ですが MySQL にイベントスケジューラという機能があるのをご存知でしょうか？
 
