@@ -19,7 +19,7 @@ published: false
 
 シンプルですが、構成図は下記のようになります。
 
-![architecture](/images/notice_event_scheduler_error/architecture.png)
+![architecture](/images/notify_event_scheduler_error/architecture.png)
 
 今回の構成では RDS で MySQL が動いており、Slack にエラーを通知します。
 
@@ -51,9 +51,9 @@ SELECT * FROM hoge LIMIT 1;
 audit ログに出力された event_scheduler の結果から、エラーのみを拾う Metric Filter を作成します。
 (実は今回の記事のキモはここです。ここが全てと言っても過言ではないです)
 
-![create_metric_filter](/images/notice_event_scheduler_error/create_metric_filter.png)
+![create_metric_filter](/images/notify_event_scheduler_error/create_metric_filter.png)
 
-![create_pattern](/images/notice_event_scheduler_error/create_pattern.png)
+![create_pattern](/images/notify_event_scheduler_error/create_pattern.png)
 
 `フィルターパターン` の部分を解説します。
 まずはじめに、audit ログは event_scheduler 以外のログも流れてくるため、そこから **対象の event_scheduler のログ** を絞り込みます。
@@ -80,7 +80,7 @@ audit ログでは、クエリ実行によるエラーコードがカンマに�
 
 パターンをテストしてみるとイメージしやすいかと思います。
 
-![pattern_test](/images/notice_event_scheduler_error/pattern_test.png)
+![pattern_test](/images/notify_event_scheduler_error/pattern_test.png)
 
 これを利用し、 **event_scheduler のログかつ成功以外のログ = event_scheduler の失敗** という条件を作成します。
 Metric Filter のパターンマッチで成功ログを取り除くには `-` を使用します。
@@ -125,13 +125,13 @@ SELECT *
 
 ではメトリクス値を 1 として Metric Filter を作成しましょう。
 
-![preview_metric_filter](/images/notice_event_scheduler_error/preview_metric_filter.png)
+![preview_metric_filter](/images/notify_event_scheduler_error/preview_metric_filter.png)
 
 ### CloudWatch Alarm
 
 上記で作成した Metric Filter をベースに CloudWatch Alarm を作成します。
 
-![create_cloudwatch_alarm](/images/notice_event_scheduler_error/create_cloudwatch_alarm.png)
+![create_cloudwatch_alarm](/images/notify_event_scheduler_error/create_cloudwatch_alarm.png)
 
 1回でも event_scheduler のエラーが発生する、つまりメトリクスが 1 以上になった場合に通知を行うようにしたいので、しきい値を 1以上に設定。
 アラームを実行するデータポイントも 1/1 とします。
@@ -141,7 +141,7 @@ SELECT *
 そのため CloudWatch Alarm は常にデータを「欠落状態」として認識します。
 ただし event_scheduler が成功している以上、欠落状態は良好な状態であるため「欠落データを適正(しきい値を超えていない)」を選択します。
 
-![create_cloudwatch_alarm_action](/images/notice_event_scheduler_error/create_cloudwatch_alarm_action.png)
+![create_cloudwatch_alarm_action](/images/notify_event_scheduler_error/create_cloudwatch_alarm_action.png)
 
 最後に **アクションの通知設定** に Chatbot と連携済みの SNS Topic を指定すれば完成です。
 
@@ -210,7 +210,7 @@ https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/chat
 
 今回の構成では下記のような内容が Slack に通知されます🙌
 
-![notice_slack](/images/notice_event_scheduler_error/notice_slack.png)
+![notify_slack](/images/notify_event_scheduler_error/notify_slack.png)
 
 :::message
 もし通知内容をカスタマイズしたい場合は、CloudWatch Alarm から直接 SNS Topic に通知するのではなく、EventBridge を経由し [input transformer](https://docs.aws.amazon.com/ja_jp/eventbridge/latest/userguide/eb-transform-target-input.html) を用いると良いと思います。
