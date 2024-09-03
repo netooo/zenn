@@ -2,140 +2,188 @@
 title: "MySQL event_scheduler のエラーを通知する"
 emoji: "🧤"
 type: "tech"
-topics: ["MySQL", "AWS", "CloudWatch", "Terraform", "Tech"]
+topics: ["MySQL", "EventScheduler", "AWS", "CloudWatch", "Terraform"]
 publication_name: fukurou_labo
 published: false
 ---
 
-突然ですが MySQL にイベントスケジューラという機能があるのをご存知でしょうか？
+突然ですが MySQL に [event_scheduler](https://dev.mysql.com/doc/refman/8.0/ja/event-scheduler.html) という機能があるのをご存知でしょうか。
+この event_scheduler、指定したクエリを定期的に実行することが出来る機能で cron job のような振る舞いをします。
 
-今回は MySQL のイベントスケジューラで発生したエラーを拾い、通知する仕組みを Terraform で実装してみたので紹介です。
+「1日に1回、特定のクエリを実行したい」というようなシンプルなケースでは、EventBridge Scheduler + Lambda のようなリッチな構成にせずとも実現できるのです。
+ただし event_scheduler によるクエリが万が一失敗してしまった場合、どうやって検知すれば良いでしょうか。
 
-## 事の発端
+ということで今回は(AWS環境で) event_scheduler によるクエリのエラーを検知し通知する方法をご紹介します。
 
-とある業務で毎日1回特定のクエリを実行したいというケースに遭遇しました。
-
-まぁよくある集計系ですね。
-
-最近インフラ(AWS)にどっぷり浸かっている私は「よし、EventBridge Scheduler と Lambda で作ったろ!」と張り切っていたのですが、
-
-同僚に「MySQL にイベントスケジューラがあるからそれ使えばいいんじゃない？」と言われ面を喰らいました。
-
-[MySQL イベントスケジューラの構成](https://dev.mysql.com/doc/refman/8.0/ja/events-configuration.html)
-
-言われた時はイベントスケジューラの存在すら知らなかったのですが、調べてみると確かに単純な SQL を実行するだけであれば、わざわざ AWS リソースを作成せずともこれでいいじゃん、と。
-
-ただ、イベントスケジューラで設定したクエリが失敗しても通知が来ない点だけはなんとかしないといけなかったので、その辺りを Terraform で実装してみました。
-
-## 構成
+# 構成
 
 シンプルですが、構成図は下記のようになります。
 
-![EventScheduler Architecture](https://github.com/netooo/LT/assets/46105888/2057b99e-0b9e-47a7-984c-d20369746702)
+![architecture](/images/notice_event_scheduler_error/architecture.png)
 
-今回のサービスは RDS で MySQL が動いています。
+今回の構成では RDS で MySQL が動いており、Slack にエラーを通知します。
 
-イベントスケジューラの実行結果は audit ログに出力されるため、CloudWatch Logs Metric Filter でエラーを拾います。
+まず event_scheduler の実行結果は audit ログに出力されるため、CloudWatch Logs Metric Filter でエラーを拾います。
+次に拾ったエラーを CloudWatch Alarm で補足し、SNS Topic に通知します。
+最後に SNS Topic から Chatbot 経由で Slack に通知を行います。
 
-拾ったエラーを CloudWatch Alarm で補足し、SNS Topic に通知します。
+# event_scheduler を作成
 
-SNS Topic は Chatbot と連携しており、最終的には Chatbot が Slack 通知を行います。
-
-一例としてイベントスケジューラで実行されるクエリを下記とします。
+この記事の本題ではないのでサクッと作成します。
 
 ```sql
-SELECT * FROM hoge AS hoge_event_scheduler;
+CREATE EVENT daily_select_hoge
+ON SCHEDULE EVERY 1 day
+STARTS '2024-09-01 00:00:00'
+ON COMPLETION PRESERVE
+DO
+SELECT * FROM hoge LIMIT 1;
 ```
 
-```callout
-`AS` で別名を付与しているところがポイントです。
-```
+この場合、毎日0時に `SELECT * FROM hoge LIMIT 1;` が定期実行されます。
 
-## Terraform での実装
+# 通知機構を実装
+
+## 手動
 
 ### CloudWatch Logs Metric Filter
 
-いきなりラスボスなんですが、ここが全てと言っても過言ではないです。
+audit ログに出力された event_scheduler の結果から、エラーのみを拾う Metric Filter を作成します。
+(実は今回の記事のキモはここです。ここが全てと言っても過言ではないです)
 
-audit ログに出力されたイベントスケジューラの結果から、エラーのみを拾う Metric Filter を作成します。
+![create_metric_filter](/images/notice_event_scheduler_error/create_metric_filter.png)
 
-```terraform
-data "aws_cloudwatch_log_group" "this" {
-  name = "/aws/rds/cluster/${aws_rds_cluster.this.cluster_identifier}/audit"
-}
+![create_pattern](/images/notice_event_scheduler_error/create_pattern.png)
 
-resource "aws_cloudwatch_log_metric_filter" "this" {
-  name           = "EventSchedulerError"
-  log_group_name = data.aws_cloudwatch_log_group.this.name
-  pattern        = "\"AS hoge_event_scheduler',\" - \"AS hoge_event_scheduler',0\""
-  metric_transformation {
-    name      = "error_event"
-    namespace = "event_scheduler/daily_hoge_select"
-    value     = "1"
-  }
-}
-```
-
-`pattern` の部分を解説します。
-
-まずはじめに、audit ログはイベントスケジューラ以外のログも流れてくるため、そこからイベントスケジューラのログを絞り込みます。
-
+`フィルターパターン` の部分を解説します。
+まずはじめに、audit ログは event_scheduler 以外のログも流れてくるため、そこから **対象の event_scheduler のログ** を絞り込みます。
 それを実現しているのが下記の部分です。
 
-```terraform
-pattern = "\"AS hoge_event_scheduler',\""
+```
+"hoge LIMIT 1',"
 ```
 
-`AS` で別名を付けることで、イベントスケジューラのログを絞り込みやすくしています。
-
-また、audit ログではクエリをシングルクォートで囲っているため、クエリの末尾に `'` を付与しています。
-
+また、audit ログではクエリをシングルクォートで囲っているため、末尾に `'` を付与しています。
 さて最後のカンマは何でしょうか。
-
-audit ログでは、クエリ実行によるステータスコードがカンマに続いて返却されます。
-
+audit ログでは、クエリ実行によるエラーコードがカンマに続いて返却されます。
 クエリに成功した場合は下記のようなログが出力されます。
 
-```log
-'SELECT * FROM hoge AS hoge_event_scheduler',0
+```
+'SELECT * FROM hoge LIMIT 1',0
 ```
 
-一方でクエリに失敗した場合は下記のように 0 以外のステータスコードが出力されます。
+一方でクエリに失敗した場合は下記のように 0 以外のエラーコードが出力されます。
 
-```log
-'SELECT * FROM hoge AS hoge_event_scheduler',1064
+```
+'SELECT * FROM hoge LIMIT 1',1064
 ```
 
-これを利用し、 **イベントスケジューラのログかつ成功以外のログ=イベントスケジューラの失敗** という条件を作成します。
+パターンをテストしてみるとイメージしやすいかと思います。
 
-Metric Filter のパターンマッチで、成功ログを取り除くには `-` を使用します。
+![pattern_test](/images/notice_event_scheduler_error/pattern_test.png)
 
-先ほどイベントスケジューラのログに絞り込んだので、そこから成功ログを取り除くと下記のようになります。
+これを利用し、 **event_scheduler のログかつ成功以外のログ = event_scheduler の失敗** という条件を作成します。
+Metric Filter のパターンマッチで成功ログを取り除くには `-` を使用します。
+先ほど event_scheduler のログに絞り込んだので、そこから成功ログを取り除くと下記のようになります。
 
-```terraform
-pattern = "\"AS hoge_event_scheduler',\" - \"AS hoge_event_scheduler',0\""
+```
+"hoge LIMIT 1'," - "hoge LIMIT 1',0"
 ```
 
-これでイベントスケジューラの失敗ログを拾う Metric Filter が完成しました。
+`,0` を取り除くことで、event_scheduler の失敗ログを拾うことが出来ます。
+これで event_scheduler の失敗ログを拾う Metric Filter が完成しました。
 
-あとはこの Metric Filter を CloudWatch Metric に追加します。
+**待ってください、本当にこれで良いですか...?**
 
-```terraform
-metric_transformation {
-  name      = "error_event"
-  namespace = "event_scheduler/daily_hoge_select"
-  value     = "1"
-}
+`hoge LIMIT 1` で終わるクエリは event_scheduler 以外で実行されないことを保証できますか？
+もし他のクエリが同じ形式で実行された場合、誤検知してしまう可能性があります。
+
+event_scheduler でしか実行されないクエリを保証するために SQL を少し改良します。
+
+```sql
+CREATE EVENT daily_select_hoge
+ON SCHEDULE EVERY 1 day
+STARTS '2024-09-01 00:00:00'
+ON COMPLETION PRESERVE
+DO
+SELECT *
+/*daily_select_hoge_event_scheduler*/ FROM hoge LIMIT 1;
 ```
+
+`/*daily_select_hoge_event_scheduler*/` というコメントを追加しました。
+この状態でパターンを
+
+```
+"/*daily_select_hoge_event_scheduler*/ FROM hoge LIMIT 1'," - "/*daily_select_hoge_event_scheduler*/ FROM hoge LIMIT 1',0"
+```
+
+とすることで event_scheduler でしか実行されないことを保証することができます。
+え? なぜ末尾にコメントを追加しないのかって?
+私も最初は末尾にコメントを追加して検証してたんですが、末尾だと audit のログ出力時に削除されてしまうんですよね...😅
+そのため少し不格好ですが、最終行の先頭にコメントを追加しています。
+まぁ実際に設定する event_scheduler のクエリは複数行になると思うので、個人的にはあまり気になりません。
+
+ではメトリクス値を 1 として Metric Filter を作成しましょう。
+
+![preview_metric_filter](/images/notice_event_scheduler_error/preview_metric_filter.png)
 
 ### CloudWatch Alarm
 
 上記で作成した Metric Filter をベースに CloudWatch Alarm を作成します。
 
-```terraform
+![create_cloudwatch_alarm](/images/notice_event_scheduler_error/create_cloudwatch_alarm.png)
+
+1回でも event_scheduler のエラーが発生する、つまりメトリクスが 1 以上になった場合に通知を行うようにしたいので、しきい値を 1以上に設定。
+アラームを実行するデータポイントも 1/1 とします。
+
+続いて **欠落データ処理** の設定を行います。
+基本的に event_scheduler は成功する前提で構築するため、Metric Filter は何も検知しないことがほとんどです。
+そのため CloudWatch Alarm は常にデータを「欠落状態」として認識します。
+ただし event_scheduler が成功している以上、欠落状態は良好な状態であるため「欠落データを適正(しきい値を超えていない)」を選択します。
+
+![create_cloudwatch_alarm_action](/images/notice_event_scheduler_error/create_cloudwatch_alarm_action.png)
+
+最後に **アクションの通知設定** に Chatbot と連携済みの SNS Topic を指定すれば完成です。
+
+## Terraform
+
+お待たせしました。
+こういった設定は全て Terraform で管理したいですね。
+今回記事を書くにあたって、初めて手動で設定してみたのですが中々手こずりました...
+
+### CloudWatch Logs Metric Filter
+
+```tf:cloudwatch_logs_metric_filter
+locals {
+  pattern = "/*daily_select_hoge_event_scheduler*/ FROM hoge LIMIT 1"
+}
+
+resource "aws_cloudwatch_log_metric_filter" "this" {
+  name           = "DailySelectHogeError"
+  log_group_name = "/aws/rds/cluster/${var.rds_cluster_identifier}/audit"
+  pattern        = "\"${local.pattern}',\" - \"${local.pattern}',0\""
+  metric_transformation {
+    name      = "error_event"
+    namespace = "event_scheduler/daily_select_hoge"
+    value     = "1"
+  }
+}
+```
+
+本来 `pattern` は 
+
+```
+"/*daily_select_hoge_event_scheduler*/ FROM hoge LIMIT 1'," - "/*daily_select_hoge_event_scheduler*/ FROM hoge LIMIT 1',0"
+```
+
+となるんですが、Terraform では上記全てを 1つの文字列として設定する必要があるため、内側のダブルクォートをエスケープしています。
+
+### CloudWatch Alarm
+
+```tf:cloudwatch_alarm
 resource "aws_cloudwatch_metric_alarm" "this" {
-  alarm_name                = "DailyHogeSelectError"
-  alarm_description         = "Notify when daily_hoge_select error for event_scheduler"
+  alarm_name                = "DailySelectHogeError"
+  alarm_description         = "Notify when daily_select_hoge for event_scheduler error"
   metric_name               = aws_cloudwatch_log_metric_filter.this.metric_transformation[0].name
   namespace                 = aws_cloudwatch_log_metric_filter.this.metric_transformation[0].namespace
   comparison_operator       = "GreaterThanOrEqualToThreshold"
@@ -149,35 +197,28 @@ resource "aws_cloudwatch_metric_alarm" "this" {
 }
 ```
 
-CloudWatch Logs Metric Filter の metric_transformation は複数作成可能ですが、今回は 1 つだけ作成したのでインデックス 0 を指定しています。
+CloudWatch Logs Metric Filter には metric_transformation を複数設定することが可能ですが、今回は 1 つだけ設定したのでインデックス 0 を指定しています。
 
-1回でもイベントスケジューラのエラーが発生する、つまりメトリクスが 1 以上になった場合に通知を行うようにしたいので下記の設定を行います。
+:::details Chatbot の Slack 設定
+余談ですが、Terraform AWS Provider v5.61.0 より AWS Chatbot の「Slack 設定」と「Teams 設定」がサポートされましたね。
+今まで CloudFormation を併用したり、AWS Cloud Control Provider (awscc) を使用するなど煩雑な管理が必要でしたがようやく開放されました🎉
 
-```terraform
-comparison_operator = "GreaterThanOrEqualToThreshold"
-threshold           = "1"
-evaluation_periods  = "1"
-statistic           = "Sum"
-```
+https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/chatbot_slack_channel_configuration
+:::
 
-続いて `treat_missing_data` の設定を行います。
+# 通知内容
 
-基本的にイベントスケジューラは成功する前提で構築するため、Metric Filter は何も検知しないことがほとんどです。
+今回の構成では下記のような内容が Slack に通知されます🙌
 
-そのため CloudWatch Alarm は常にデータの「欠損状態」として認識します。
+![notice_slack](/images/notice_event_scheduler_error/notice_slack.png)
 
-ただしイベントスケジューラが成功している以上、データは常に欠損状態であるため、欠損状態を良好状態として扱わせます。
+:::message
+もし通知内容をカスタマイズしたい場合は、CloudWatch Alarm から直接 SNS Topic に通知するのではなく、EventBridge を経由し [input transformer](https://docs.aws.amazon.com/ja_jp/eventbridge/latest/userguide/eb-transform-target-input.html) を用いると良いと思います。
+:::
 
-```terraform
-treat_missing_data = "notBreaching"
-```
 
-最後に `alarm_actions` に Chatbot と連携済みの SNS Topic を指定すれば完成です。
-
-## 最後に
+# 最後に
 
 いかがだったでしょうか。
-
-個人的には満足しつつ、欲を言えばイベントスケジューラの登録まで Terraform で完結させることが出来れば 100点だと感じています。
-
-マニアックな内容ですが、誰かの参考になれば幸いです。
+個人的には満足しつつ、event_scheduler の登録は手動となるので Terraform で管理したいなぁと思ってます💪
+マニアックな内容ですが、誰かの参考になれば幸いです!!

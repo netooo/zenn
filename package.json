@@ -10,6 +10,6 @@
   "author": "netooo",
   "license": "ISC",
   "dependencies": {
-    "zenn-cli": "latest"
+    "zenn-cli": "^0.1.155"
   }
 }
