@@ -2,7 +2,7 @@
 title: "MySQL event_scheduler のエラーを通知する"
 emoji: "🧤"
 type: "tech"
-topics: ["MySQL", "EventScheduler", "AWS", "CloudWatch", "Terraform"]
+topics: ["mysql", "event_scheduler", "aws", "cloudwatch", "terraform"]
 publication_name: fukurou_labo
 published: false
 ---
