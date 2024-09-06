@@ -4,7 +4,7 @@ emoji: "🧤"
 type: "tech"
 topics: ["mysql", "event_scheduler", "aws", "cloudwatch", "terraform"]
 publication_name: fukurou_labo
-published: false
+published: true
 ---
 
 突然ですが MySQL に [event_scheduler](https://dev.mysql.com/doc/refman/8.0/ja/event-scheduler.html) という機能があるのをご存知でしょうか。
