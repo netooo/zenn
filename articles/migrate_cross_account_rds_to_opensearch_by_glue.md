@@ -1,5 +1,5 @@
 ---
-title: "AWS Glue で 別アカウントの RDS から OpenSearch にデータを同期する"
+title: "AWS Glue で 異なるアカウントの RDS から OpenSearch にデータを同期する"
 emoji: "🔀"
 type: "tech"
 topics: ["aws", "glue", "rds", "opensearch"]
@@ -15,8 +15,7 @@ published: false
 ![ideal](/images/migrate_cross_account_rds_to_opensearch_by_glue/ideal.png)
 
 # 構成
-最終的には下記の構成になりました。
-
+最終的には下記の構成になりました。  
 Account A に余計なリソースが存在していないのが個人的に気に入ってます。
 ![architecture](/images/migrate_cross_account_rds_to_opensearch_by_glue/architecture.png)
 
@@ -114,7 +113,7 @@ Glue Connection 用の Security Group を作成します。
 ![create_sg_for_glue_connection_1](/images/migrate_cross_account_rds_to_opensearch_by_glue/create_sg_for_glue_connection_1.png)
 ![create_sg_for_glue_connection_2](/images/migrate_cross_account_rds_to_opensearch_by_glue/create_sg_for_glue_connection_2.png)
 
-アカウントA の RDS にアタッチしている Security Group に、今回作成した Glue Connection 用の Security Group からのアクセスを許可するルール追加も忘れずに。
+アカウントA の RDS にアタッチしている Security Group に、今回作成した Glue Connection 用の Security Group からのアクセスを許可する Ingress ルールの追加も忘れずに。
 ![add_ingress_for_glue_connection_sg](/images/migrate_cross_account_rds_to_opensearch_by_glue/add_ingress_for_glue_connection_sg.png)
 
 
@@ -242,13 +241,13 @@ Glue Connector の作成ページにリダイレクトするので、必要な�
 ### 4.4 NAT Gateway を作成
 4.3 で使用した AWS Glue Connector for Elasticsearch は「AWS Account ID: 709825985650」の `us-east-1` リージョンの ECR Image を使用しているため、Private Subnet 内の Glue ジョブから別アカウント・別リージョンの ECR Image を Pull する必要があります。  
 そのため ECR 用の VPC Endpoint を作成しても、Private Subnet が ap-northeast-1 リージョンの場合はアクセス出来ません。  
-今回は NAT Gateway を Public Subnet に配置して、Image を Pull するようにしました。  
+今回は NAT Gateway を Public Subnet に配置して、Image を Pull できるようにしました。  
 :::message  
 普段 IaC で NAT Gateway を構築していると、久々の手動構築の際、NAT 配置後にルートテーブルの設定を忘れてしまって無駄にハマってしまいました。。。  
 ルートテーブルの設定変更も忘れずに!!  
 :::
 
-### 4.5 IAM Role を作成
+### 4.5 Glue ジョブ用 IAM Role を作成
 Glue ジョブ用の IAM Role を作成します。  
 信頼ポリシーは下記のように設定します。  
 ```json
