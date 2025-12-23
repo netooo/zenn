@@ -15,10 +15,11 @@ published: false
 ![ideal](/images/migrate_cross_account_rds_to_opensearch_by_glue/ideal.png)
 
 # 構成
-最終的には下記の構成になりました。  
-Account A に余計なリソースが存在していないのが個人的に気に入ってます。
 ![architecture](/images/migrate_cross_account_rds_to_opensearch_by_glue/architecture.png)
-
+最終的には上記の構成になりました。  
+アカウントA にホスティングされている RDS からアカウントB にホスティングされている OpenSearch に Glue を使ってデータを同期します。  
+データを同期するアカウントB に Glue 等のリソースを配置し、アカウントA には余計なリソースが存在していない点が個人的に気に入ってます。  
+仮に同期元の RDS が アカウントC, アカウントD, ... と増えても、アカウントB の Glue のリソースを追加するだけで対応できるのが良いですね。  
 データ同期であれば Glue でなくても OpenSearch Ingestion や Database Migration Service(DMS) や Lambda を使う方法もありますが、下記の理由で見送りました。
 
 - OpenSearch Ingestion
