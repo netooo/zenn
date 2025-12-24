@@ -4,7 +4,7 @@ emoji: "🔀"
 type: "tech"
 topics: ["aws", "glue", "rds", "opensearch"]
 publication_name: fukurou_labo
-published: false
+published: true
 ---
 
 株式会社フクロウラボでインフラをメインに担当している満江です。
