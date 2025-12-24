@@ -25,7 +25,7 @@ published: true
 データ同期であれば Glue でなくても OpenSearch Ingestion や Database Migration Service(DMS) や Lambda を使う方法もありますが、下記の理由で見送りました。
 
 - OpenSearch Ingestion
-  - (2025/12/22 時点で) cross-account の RDS に対応してなさそう
+  - (2025/12/24 時点で) cross-account の RDS に対応してなさそう
   - https://docs.aws.amazon.com/ja_jp/opensearch-service/latest/developerguide/rds-mysql.html#rds-mysql-pipeline-limitations
 - DMS
   - 日次同期で十分であり、ニアリアルタイムでの同期は不要(コストを抑えたい)
