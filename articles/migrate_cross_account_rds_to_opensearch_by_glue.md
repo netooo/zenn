@@ -394,7 +394,7 @@ OpenSearch へのアクセスでは「Connection options」の設定が重要に
 ### 5.1 Glue ジョブの実行
 時は来ました。 Glue ジョブを手動で実行しましょう。  
 Run Status が `Succeeded` になり、OpenSearch にデータが登録されていれば成功です。  
-Glue Job Schedules で日次実行のスケジュールを設定すれば完了!!
+あとは Glue Job Schedules で日次実行のスケジュールを設定すれば完了!!
 ![check_glue_job_1](/images/migrate_cross_account_rds_to_opensearch_by_glue/check_glue_job_1.png)
 ![check_glue_job_2](/images/migrate_cross_account_rds_to_opensearch_by_glue/check_glue_job_2.png)
 
