@@ -1,5 +1,5 @@
 ---
-title: "Templater と Google Calendar で Obsidian の Daily Note を自動化したい"
+title: "タスク管理もミーティングメモも Obsidian に自動で集まる仕組みを作った"
 emoji: "📅"
 type: "tech"
 topics: ["obsidian", "pkm", "idea", "google_calendar"]
@@ -561,6 +561,10 @@ launchctl list | grep gdrive
 ## 動作イメージ
 
 会議が終わって Gemini メモが作成されると、少しして `5_Work/` 配下にメモが追加されます。  
+良い感じですね!!
+
+![gemini_memo](/images/obsidian_google_calendar/gemini_memo.png)
+
 ログでは同期状況を確認できます。
 
 ```
@@ -569,8 +573,6 @@ launchctl list | grep gdrive
 2026-03-16 12:42:01  結果: コピー 1 件 / スキップ 0 件 / エラー 0 件
 2026-03-16 12:42:01  ─── 同期完了 ───────────────────────────
 ```
-
-![gemini_memo](/images/obsidian_google_calendar/gemini_memo.png)
 
 # 最後に
 
