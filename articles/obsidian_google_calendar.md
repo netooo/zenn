@@ -4,7 +4,7 @@ emoji: "📅"
 type: "tech"
 topics: ["obsidian", "pkm", "idea", "google_calendar"]
 publication_name: fukurou_labo
-published: false
+published: true
 ---
 
 こんにちは、フクロウラボの満江です。
