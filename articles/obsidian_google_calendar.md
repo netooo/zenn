@@ -55,6 +55,15 @@ obsidian/
 
 # 2_Daily/ の自動化
 
+## 動作イメージ
+
+Daily Note を新規作成すると、直近の未完了タスクが Tasks Left と Daily Tasks に自動で引き継がれます。  
+こんな感じ。
+
+| Before | After |
+|-|-|
+| ![daily_note_before](/images/obsidian_google_calendar/daily_note_before.png) | ![daily_note_after](/images/obsidian_google_calendar/daily_note_after.png) |
+
 ## Daily Note のテンプレート構成
 
 私は Daily Note のテンプレートを `2_Daily/0_Template.md` として用意しており、以下のセクションで構成しています。
