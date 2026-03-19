@@ -58,7 +58,7 @@ obsidian/
 ## 動作イメージ
 
 Daily Note を新規作成すると、直近の未完了タスクが Tasks Left と Daily Tasks に自動で引き継がれます。  
-こんな感じ。
+更に Daily Tasks には Google Calendar の予定が自動で追加されます。こんな感じ。
 
 | Before | After |
 |-|-|
