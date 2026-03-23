@@ -156,7 +156,7 @@ for (let offset = 1; offset <= TASKS_LEFT_MAX_LOOKBACK_DAYS; offset++) {
 ポイントは以下です。
 
 - `tp.date.now("YYYY-MM-DD", -offset)` で対象日付を計算
-- `tp.file.find_tfile(`2_Daily/${date}`)` でノートを検索し、存在しない日（休日など）はスキップ
+- ``tp.file.find_tfile(`2_Daily/${date}`)`` でノートを検索し、存在しない日（休日など）はスキップ
 - 未完了タスクは正規表現でセクション内容を抽出し、`- [ ]` で始まる行のみを取得
 - `line.trim() !== "- [ ]"` で空のチェックボックス（`- [ ]` のみの行）は引き継ぎ対象から除外
 
